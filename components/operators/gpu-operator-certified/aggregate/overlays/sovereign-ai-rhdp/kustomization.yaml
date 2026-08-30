@@ -7,3 +7,5 @@ commonAnnotations:
 resources:
   - ../../../instance/overlays/aws
   - ../../../operator/overlays/v24.9
+
+# TODO enable driver 580.65.06 to support cuda 13 for specified models/images
