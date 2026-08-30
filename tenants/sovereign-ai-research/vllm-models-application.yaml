@@ -14,13 +14,46 @@ spec:
     server: https://kubernetes.default.svc
   project: cluster-config
   source:
-    repoURL: https://github.com/rh-ai-quickstart/rh-research.git
-    targetRevision: 456c244b5ae18c5e81326dee9c08d88449c0f0bb
+    repoURL: https://github.com/DevoteamNL/sovereign-ai-research.git
+    targetRevision: rhdp-aws-downsize
     path: deploy/helm/vllm-models
     helm:
+      valueFiles:
+        - values-aws-gpu-conservative.yaml
       valuesObject:
         global:
           namespace: sovereign-ai-research
+        models:
+          llama-3-3-70b-fp8:
+            tolerations:
+              - key: nvidia.com/gpu
+                operator: Equal
+                value: "true"
+                effect: NoSchedule
+              - key: gpu-type
+                operator: Equal
+                value: g6e
+                effect: NoSchedule
+          nemotron-nano-30b:
+            tolerations:
+              - key: nvidia.com/gpu
+                operator: Equal
+                value: "true"
+                effect: NoSchedule
+              - key: gpu-type
+                operator: Equal
+                value: g6e
+                effect: NoSchedule
+          nemotron-mini-4b:
+            tolerations:
+              - key: nvidia.com/gpu
+                operator: Equal
+                value: "true"
+                effect: NoSchedule
+              - key: gpu-type
+                operator: Equal
+                value: g6
+                effect: NoSchedule
   syncPolicy:
     automated:
       prune: false

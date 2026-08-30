@@ -1,23 +1,23 @@
 apiVersion: machine.openshift.io/v1beta1
 kind: MachineSet
 metadata:
-  name: ${CLUSTER_ID}-g6e-${AZ}
+  name: ${CLUSTER_ID}-g6-${AZ}
   namespace: openshift-machine-api
   labels:
     machine.openshift.io/cluster-api-cluster: ${CLUSTER_ID}
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       machine.openshift.io/cluster-api-cluster: ${CLUSTER_ID}
-      machine.openshift.io/cluster-api-machineset: ${CLUSTER_ID}-g6e-${AZ}
+      machine.openshift.io/cluster-api-machineset: ${CLUSTER_ID}-g6-${AZ}
   template:
     metadata:
       labels:
         machine.openshift.io/cluster-api-cluster: ${CLUSTER_ID}
         machine.openshift.io/cluster-api-machine-role: worker
         machine.openshift.io/cluster-api-machine-type: worker
-        machine.openshift.io/cluster-api-machineset: ${CLUSTER_ID}-g6e-${AZ}
+        machine.openshift.io/cluster-api-machineset: ${CLUSTER_ID}-g6-${AZ}
         node-role.kubernetes.io/gpu: ""
         node-role.kubernetes.io/worker: ""
     spec:
@@ -29,7 +29,7 @@ spec:
           value: "true"
           effect: NoSchedule
         - key: gpu-type
-          value: g6e
+          value: g6
           effect: NoSchedule
       providerSpec:
         value:
@@ -37,7 +37,7 @@ spec:
           kind: AWSMachineProviderConfig
           ami:
             id: ${AMI_ID}
-          instanceType: g6e.2xlarge
+          instanceType: g6.2xlarge
           iamInstanceProfile:
             id: ${CLUSTER_ID}-worker-profile
           credentialsSecret:

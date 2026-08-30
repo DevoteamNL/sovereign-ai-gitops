@@ -19,17 +19,11 @@ spec:
     path: deploy/helm/aiq-rh
     helm:
       valueFiles:
-        - values-vllm.yaml
+        - values-vllm-aws-conservative.yaml
       valuesObject:
         appname: sovereign-ai-research
         project:
           deploymentTarget: kind
-        apps:
-          backend:
-            env:
-              VLLM_BASE_URL: http://nemotron-nano-30b-predictor.sovereign-ai-research.svc.cluster.local:8080
-              VLLM_ORCHESTRATOR_BASE_URL: http://gpt-oss-120b-predictor.sovereign-ai-research.svc.cluster.local:8080
-              VLLM_SUMMARY_BASE_URL: http://nemotron-mini-4b-predictor.sovereign-ai-research.svc.cluster.local:8080
   syncPolicy:
     automated:
       prune: false
@@ -42,6 +36,3 @@ spec:
         duration: 5s
         factor: 2
         maxDuration: 20m
-
-# TODO change this so that it uses the smaller models specified to run on the smaller GPUs
-# Add machine set for the 3rd GPU instance g5e
