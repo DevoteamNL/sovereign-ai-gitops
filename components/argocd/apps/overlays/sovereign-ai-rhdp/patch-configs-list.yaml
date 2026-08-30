@@ -4,15 +4,20 @@ metadata:
   name: cluster-configs
 spec:
   generators:
-  - list:
-      elements:
-      - cluster: local
-        url: https://kubernetes.default.svc
-        values:
-          name: user-workload-monitoring
-          path: components/cluster-configs/user-workload-monitoring/overlays/default
-      - cluster: local
-        url: https://kubernetes.default.svc
-        values:
-          name: sovereign-ai-rag
-          path: tenants/sovereign-ai-rag
+    - list:
+        elements:
+          - cluster: local
+            url: https://kubernetes.default.svc
+            values:
+              name: user-workload-monitoring
+              path: components/cluster-configs/user-workload-monitoring/overlays/default
+          - cluster: local
+            url: https://kubernetes.default.svc
+            values:
+              name: sovereign-ai-rag
+              path: tenants/sovereign-ai-rag
+          - cluster: local
+            url: https://kubernetes.default.svc
+            values:
+              name: sovereign-ai-research
+              path: tenants/sovereign-ai-research

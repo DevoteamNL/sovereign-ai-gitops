@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sovereign-ai-research-vllm-models
+  namespace: openshift-gitops
+  labels:
+    gitops.ownedBy: cluster-config
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  destination:
+    namespace: sovereign-ai-research
+    server: https://kubernetes.default.svc
+  project: cluster-config
+  source:
+    repoURL: https://github.com/rh-ai-quickstart/rh-research.git
+    targetRevision: 456c244b5ae18c5e81326dee9c08d88449c0f0bb
+    path: deploy/helm/vllm-models
+    helm:
+      valuesObject:
+        global:
+          namespace: sovereign-ai-research
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 20m

@@ -33,9 +33,6 @@ spec:
                   effect: NoSchedule
                   operator: Exists
   syncPolicy:
-    automated:
-      prune: false
-      selfHeal: true
     syncOptions:
       - SkipDryRunOnMissingResource=true
     retry:
