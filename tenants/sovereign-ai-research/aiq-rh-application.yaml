@@ -45,4 +45,3 @@ spec:
 
 # TODO change this so that it uses the smaller models specified to run on the smaller GPUs
 # Add machine set for the 3rd GPU instance g5e
-# Use RHAI 3 instead of 2
