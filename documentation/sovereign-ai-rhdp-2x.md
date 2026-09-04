@@ -12,12 +12,17 @@ applied imperatively, since it requires the per-cluster `${CLUSTER_ID}` and
 
 ## Prerequisites
 
+- The `oc`, `kustomize`, and `yq` CLIs installed locally. `oc` and
+  `kustomize` are pre-installed on RHDP. Install `yq` on Fedora with
+  `sudo dnf install yq -y`.
+
 - A freshly-provisioned RHDP cluster ("OpenShift Container Platform with
   IBM Fusion" or equivalent) in `us-east-2`, running OpenShift **4.18.x**.
   RHOAI 2.x does not require 4.19+; if your cluster is already on 4.19+,
   use the `sovereign-ai-rhdp-3x` overlay instead (branch
   `rhoai-3x-archive` — parked until RHDP offers a 4.19+-capable catalog
   item as of this writing).
+
 - Cluster admin access. Test with:
 
   ```bash
@@ -26,10 +31,6 @@ applied imperatively, since it requires the per-cluster `${CLUSTER_ID}` and
 
   Expected output: `kube:admin`, `kubeadmin`, or `admin` depending on how
   RHDP provisioned the cluster.
-
-- The `oc`, `kustomize`, and `yq` CLIs installed locally. `oc` and
-  `kustomize` are pre-installed on RHDP. Install `yq` on Fedora with
-  `sudo dnf install yq -y`.
 
 - This repository cloned locally, on the `rhoai-2x` branch:
 
@@ -99,12 +100,14 @@ while the platform stack converges.
 Apply the MachineSet for GPU-enabled workers (`g6e.2xlarge`, NVIDIA L40S,
 48GB VRAM each).
 
-> **Is this stage needed for a platform-only deployment?** Not strictly —
-> the platform operators install without any GPU nodes present. But RHDP's
-> base worker nodes are typically fully allocated (no headroom for ArgoCD
-> and operator pods), so if Stage 4 shows operator pods stuck `Pending`,
-> come back and run this stage, temporarily un-tainting the GPU nodes to
-> give the platform stack room to schedule.
+> **Confirmed on a real run**: RHDP's base worker nodes do not have
+> headroom for ArgoCD's platform pods — `openshift-gitops-application-controller`
+> and others land `Pending` with `Insufficient cpu`/`Insufficient memory`
+> until the GPU taint is temporarily removed in step 4 below. Treat step 4
+> as a required part of this stage, not an optional fallback — don't skip
+> it expecting to add a plain worker node instead; using the GPU nodes'
+> already-provisioned spare capacity is free, whereas an extra worker node
+> is not.
 
 1. Substitute the cluster ID into the MachineSet template and apply:
 
@@ -129,9 +132,9 @@ Apply the MachineSet for GPU-enabled workers (`g6e.2xlarge`, NVIDIA L40S,
      -o custom-columns=NAME:.metadata.name,STATUS:.status.conditions[-1].type,TAINTS:.spec.taints[*].key
    ```
 
-4. If platform pods are stuck `Pending` due to resource pressure,
-   temporarily remove the GPU taint. Patch the MachineSet and existing
-   Machine objects first — the nodelink controller syncs
+4. Remove the GPU taint (required — see note above). Patch the
+   MachineSet and existing Machine objects first — the nodelink controller
+   syncs
    `Machine.spec.taints` → `Node.spec.taints` on every reconcile cycle, so
    patching only the MachineSet is not enough:
 
@@ -182,28 +185,29 @@ Apply the MachineSet for GPU-enabled workers (`g6e.2xlarge`, NVIDIA L40S,
    > Answering **Yes** edits `kustomization.yaml`, commits, and **pushes
    > to `origin` automatically** — this is what makes ArgoCD track your
    > actual branch instead of `main`. Answer Yes when working from a
-   > feature branch; this step requires `yq` and will hard-exit without
-   > it (see below).
+   > feature branch (`yq` prerequisite for this check — see below).
 
-   > **Note.** Requires `oc`, `kustomize`, and `yq` — the branch/repo
-   > checks above hard-exit if `yq` is missing. If you don't want to
-   > install it, skip `bootstrap.sh` and run the manual equivalent
-   > instead (this bypasses the branch check, so first manually confirm
+   > **Note.** `bootstrap.sh` needs `yq`, or it fails partway through.
+   > No `yq`? Skip the script and run the steps below by hand instead.
+   > First confirm
    > `targetRevision` in the overlay's `kustomization.yaml` matches the
-   > branch you're deploying from):
-   > ```bash
-   > kustomize build bootstrap/overlays/sovereign-ai-rhdp-2x/ | oc apply -f -
-   > oc wait --for=condition=Available deployment/openshift-gitops-server \
-   >   -n openshift-gitops --timeout=300s
-   > oc delete pods -l app.kubernetes.io/name=openshift-gitops-application-controller \
-   >   -n openshift-gitops
-   > oc wait --for=condition=Available deployment/openshift-gitops-server \
-   >   -n openshift-gitops --timeout=300s
-   > ```
-   > If the GitOps operator isn't installed yet, apply it first:
-   > ```bash
-   > kustomize build components/operators/openshift-gitops/operator/overlays/latest/ | oc apply -f -
-   > ```
+   > branch you're deploying from (the script would otherwise do this
+   > check for you), then:
+   >
+   > 1. Install the GitOps operator, if not already installed:
+   >    ```bash
+   >    kustomize build components/operators/openshift-gitops/operator/overlays/latest/ | oc apply -f -
+   >    ```
+   > 2. Apply the cluster overlay and wait for ArgoCD:
+   >    ```bash
+   >    kustomize build bootstrap/overlays/sovereign-ai-rhdp-2x/ | oc apply -f -
+   >    oc wait --for=condition=Available deployment/openshift-gitops-server \
+   >      -n openshift-gitops --timeout=300s
+   >    oc delete pods -l app.kubernetes.io/name=openshift-gitops-application-controller \
+   >      -n openshift-gitops
+   >    oc wait --for=condition=Available deployment/openshift-gitops-server \
+   >      -n openshift-gitops --timeout=300s
+   >    ```
 
 2. Get the ArgoCD UI URL for monitoring progress:
 
@@ -273,9 +277,12 @@ Operator, and Red Hat OpenShift AI (RHOAI) 2.x.
    oc get datasciencecluster -A
    ```
 
-   Expected: `Phase: Ready`.
+   Expected: `READY: True` (columns are `NAME`/`READY`/`REASON`, not
+   `Phase`).
 
-6. If you removed the GPU taint in Stage 2, restore it now:
+6. Restore the GPU taint now that the platform stack is healthy
+   (required — mandatory counterpart to Stage 2 step 4; skipping it
+   leaves the GPU nodes open to non-GPU workloads indefinitely):
 
    ```bash
    export CLUSTER_ID=$(oc get infrastructure cluster -o jsonpath='{.status.infrastructureName}')
@@ -351,6 +358,3 @@ clusters often use self-signed certs.
   `Application` pointing at the app repo) and add its entry to
   `components/argocd/apps/overlays/sovereign-ai-rhdp-2x/patch-configs-list.yaml`.
   ArgoCD picks it up automatically on the next sync.
-- **RHOAI 3.x**: if your RHDP cluster is provisioned on OpenShift 4.19+,
-  use the `sovereign-ai-rhdp-3x` overlay instead (branch
-  `rhoai-3x-archive`).
