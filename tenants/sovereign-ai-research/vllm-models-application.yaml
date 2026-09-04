@@ -24,7 +24,7 @@ spec:
         global:
           namespace: sovereign-ai-research
         models:
-          llama-3-3-70b-fp8:
+          nemotron-3.5-lightning:30b:
             tolerations:
               - key: nvidia.com/gpu
                 operator: Equal
