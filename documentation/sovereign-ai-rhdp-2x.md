@@ -222,7 +222,7 @@ each) for AI workloads.
    echo "ArgoCD UI: https://$(oc get route openshift-gitops-server -n openshift-gitops -o jsonpath='{.spec.host}')"
    ```
 
-   Log in with `kubeadmin` (password from RHDP).
+   Log in with `admin` (password from RHDP).
 
 ## Stage 4: Wait for the platform stack
 
