@@ -4,4 +4,6 @@ metadata:
   name: gpu-cluster-policy
 spec:
   driver:
+    image: driver
+    repository: nvcr.io/nvidia
     version: 580.65.06
