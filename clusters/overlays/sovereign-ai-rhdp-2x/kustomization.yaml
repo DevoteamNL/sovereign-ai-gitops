@@ -4,7 +4,7 @@ kind: Kustomization
 namespace: openshift-gitops
 
 resources:
-  - ../../../components/argocd/apps/overlays/sovereign-ai-rhdp
+  - ../../../components/argocd/apps/overlays/sovereign-ai-rhdp-2x
   - ../../base
 # patches:
 # Uncomment to disable automatic sync (useful when troubleshooting)
