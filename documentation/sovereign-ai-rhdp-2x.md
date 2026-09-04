@@ -48,7 +48,7 @@ applied imperatively, since it requires the per-cluster `${CLUSTER_ID}` and
 | Stage | Description | Wall time | Active work |
 |---|---|---|---|
 | 1 | Capture cluster context | 2 min | 2 min |
-| 2 | Provision GPU nodes | 15 min | 2 min |
+| 2 | Scale workers, provision GPU nodes | 20 min | 3 min |
 | 3 | Bootstrap GitOps | 5 min | 2 min |
 | 4 | Wait for platform stack | 10–15 min | passive |
 | **Total** | | **~35–40 min** | **~6 min** |
@@ -95,64 +95,71 @@ while the platform stack converges.
 
    Expected: at least 3 worker nodes with `STATUS: Ready`.
 
-## Stage 2: Provision GPU nodes
+## Stage 2: Size the worker pool and provision GPU nodes
 
-Apply the MachineSet for GPU-enabled workers (`g6e.2xlarge`, NVIDIA L40S,
-48GB VRAM each).
+Adds a fourth plain worker for the platform stack, then applies the
+MachineSet for GPU-enabled workers (`g6e.2xlarge`, NVIDIA L40S, 48GB VRAM
+each) for AI workloads.
 
-> **Confirmed on a real run**: RHDP's base worker nodes do not have
-> headroom for ArgoCD's platform pods — `openshift-gitops-application-controller`
-> and others land `Pending` with `Insufficient cpu`/`Insufficient memory`
-> until the GPU taint is temporarily removed in step 4 below. Treat step 4
-> as a required part of this stage, not an optional fallback — don't skip
-> it expecting to add a plain worker node instead; using the GPU nodes'
-> already-provisioned spare capacity is free, whereas an extra worker node
-> is not.
+> **Confirmed on a real run**: RHDP's three base worker nodes do not have
+> headroom for the platform stack. Roughly 5.5 CPU of pod requests
+> (`rhods-dashboard` ×2 at 1.5 each, `rhods-operator` ×3 at 0.5 each, the
+> pipelines operator, ArgoCD's applicationset controller, model-catalog)
+> have nowhere to schedule and sit `Pending` with `Insufficient cpu`.
+>
+> **Add a fourth plain worker in step 1 below to give these pods a home.**
+> An earlier version of this guide instead removed the GPU taint during
+> bootstrap and restored it afterwards — do not do that. The platform pods
+> land on the GPU nodes while untainted, and restoring the taint evicts
+> them with nowhere to go, taking down the RHOAI operator (and with it the
+> admission webhook that `InferenceService` creation depends on). The
+> capacity shortfall is permanent, not a bootstrap-time blip.
 
-1. Substitute the cluster ID into the MachineSet template and apply:
+1. **Scale the base worker pool to 4.** RHDP provisions 3, which is not
+   enough for the platform stack. This must happen before bootstrapping,
+   so the platform pods have somewhere to land:
+
+   ```bash
+   oc scale machineset ${CLUSTER_ID}-worker-${AZ} -n openshift-machine-api --replicas=4
+   ```
+
+   Wait for the new node to reach `Ready`:
+
+   ```bash
+   oc get nodes -l node-role.kubernetes.io/worker -w
+   ```
+
+   > If pods still sit `Pending` at Stage 4, scale to 5 and re-check — 4 is
+   > the minimum that fit the workload above, with little headroom.
+
+2. Substitute the cluster ID into the MachineSet template and apply:
 
    ```bash
    envsubst < clusters/overlays/sovereign-ai-rhdp-2x/machinesets/g6e-machineset.yaml \
      | oc apply -f -
    ```
 
-2. Watch the MachineSet provision the nodes (background, 10–15 minutes):
+3. Watch the MachineSet provision the nodes (background, 10–15 minutes):
 
    ```bash
    oc get machinesets -n openshift-machine-api -w
    ```
 
    Wait until the new MachineSet shows `AVAILABLE` and `READY` both equal
-   to `2`. Press `Ctrl+C` to exit.
+   to the replica count (3 for the research workload — orchestrator,
+   intent+researcher, summary). Press `Ctrl+C` to exit.
 
-3. Verify the GPU nodes are Ready and tainted:
+4. Verify the GPU nodes are Ready and tainted:
 
    ```bash
    oc get nodes -l node-role.kubernetes.io/gpu='' \
      -o custom-columns=NAME:.metadata.name,STATUS:.status.conditions[-1].type,TAINTS:.spec.taints[*].key
    ```
 
-4. Remove the GPU taint (required — see note above). Patch the
-   MachineSet and existing Machine objects first — the nodelink controller
-   syncs
-   `Machine.spec.taints` → `Node.spec.taints` on every reconcile cycle, so
-   patching only the MachineSet is not enough:
-
-   ```bash
-   oc patch machineset ${CLUSTER_ID}-g6e-${AZ} -n openshift-machine-api \
-     --type json -p '[{"op":"remove","path":"/spec/template/spec/taints"}]'
-
-   for m in $(oc get machines -n openshift-machine-api \
-     -l machine.openshift.io/cluster-api-machineset=${CLUSTER_ID}-g6e-${AZ} \
-     -o name); do
-     oc patch $m -n openshift-machine-api \
-       --type merge -p '{"spec":{"taints":null}}'
-   done
-
-   oc adm taint nodes -l node-role.kubernetes.io/gpu='' nvidia.com/gpu-
-   ```
-
-   Restore the taint in Stage 4 once the platform stack is healthy.
+   Expected: all nodes `Ready`, each carrying the `nvidia.com/gpu` taint.
+   **Leave the taint in place** — it stays for the life of the cluster.
+   AI workloads tolerate it explicitly; the platform stack runs on the
+   plain workers from step 1 instead.
 
 ## Stage 3: Bootstrap GitOps
 
@@ -245,8 +252,7 @@ Operator, and Red Hat OpenShift AI (RHOAI) 2.x.
    >   --type merge -p '{"operation":{"initiatedBy":{"username":"admin"},"sync":{"syncStrategy":{"hook":{}}}}}'
    > ```
 
-2. Verify NFD applied GPU labels and nodes are schedulable (if Stage 2 was
-   run):
+2. Verify NFD applied GPU labels and the nodes are schedulable:
 
    ```bash
    oc get nodes -l nvidia.com/gpu.present=true \
@@ -280,24 +286,82 @@ Operator, and Red Hat OpenShift AI (RHOAI) 2.x.
    Expected: `READY: True` (columns are `NAME`/`READY`/`REASON`, not
    `Phase`).
 
-6. Restore the GPU taint now that the platform stack is healthy
-   (required — mandatory counterpart to Stage 2 step 4; skipping it
-   leaves the GPU nodes open to non-GPU workloads indefinitely):
+6. Confirm nothing is stuck `Pending` — this is what tells you the worker
+   pool from Stage 2 step 1 is actually big enough:
 
    ```bash
-   export CLUSTER_ID=$(oc get infrastructure cluster -o jsonpath='{.status.infrastructureName}')
-   export AZ=$(oc get machineset -n openshift-machine-api \
-     -o jsonpath='{.items[0].spec.template.spec.providerSpec.value.placement.availabilityZone}')
-
-   oc patch machineset ${CLUSTER_ID}-g6e-${AZ} -n openshift-machine-api \
-     --type json -p '[{"op":"add","path":"/spec/template/spec/taints","value":[{"key":"nvidia.com/gpu","value":"true","effect":"NoSchedule"}]}]'
-
-   oc adm taint nodes -l node-role.kubernetes.io/gpu='' nvidia.com/gpu=true:NoSchedule
+   oc get pods -A --field-selector status.phase=Pending
    ```
+
+   Expected: no results. If pods are listed here, the platform stack has
+   outgrown the worker pool — scale it up and they will schedule:
+
+   ```bash
+   oc scale machineset ${CLUSTER_ID}-worker-${AZ} -n openshift-machine-api --replicas=5
+   ```
+
+   > Do **not** resolve this by removing the GPU taint. Pods will schedule
+   > onto the GPU nodes and appear healthy, but they are then squatting on
+   > capacity the model servers need — and re-tainting later evicts them
+   > with nowhere to go, which takes down the RHOAI operator and breaks
+   > `InferenceService` admission.
 
 The platform is now deployed and verified. No AI workload is running yet.
 
 ## Troubleshooting
+
+**GPU nodes are `NotReady` after an RHDP stop/resume cycle.**
+RHDP's resume only restarts the instances it originally provisioned. GPU
+nodes added via MachineSet stay `stopped` — the control plane and base
+workers come back, the GPU nodes do not.
+
+This is easy to misdiagnose, because the Machine API still reports the
+Machines as healthy. `oc get machines` shows `phase=Running`; only the
+provider status reveals the truth:
+
+```bash
+oc get machines -n openshift-machine-api \
+  -l machine.openshift.io/cluster-api-machineset=${CLUSTER_ID}-g6e-${AZ} \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.providerStatus.instanceState}{"\n"}{end}'
+```
+
+`instanceState: stopped` confirms it. A stopped instance cannot be
+restarted through the Machine API — delete the Machines and let the
+MachineSet rebuild them (~10-15 min):
+
+```bash
+oc delete machine -n openshift-machine-api \
+  -l machine.openshift.io/cluster-api-machineset=${CLUSTER_ID}-g6e-${AZ}
+```
+
+Symptoms that point here: nodes `NotReady` with `Kubelet stopped posting
+node status`, and a pile of DaemonSet pods (`multus`, `node-exporter`,
+`nfd-worker`, GPU operator components) stuck `Pending` because they
+target the dead nodes.
+
+**`InferenceService` creation fails: "no endpoints available for service
+`rhods-operator-service`".**
+The RHOAI operator is not running, so its admission webhook can't be
+called. Seen as:
+
+```
+failed calling webhook "connection-isvc.opendatahub.io": ...
+  no endpoints available for service "rhods-operator-service"
+```
+
+Check whether its pods are `Pending`:
+
+```bash
+oc get pods -n redhat-ods-operator
+oc get pods -A --field-selector status.phase=Pending
+```
+
+If they are `Pending` with `Insufficient cpu`, the worker pool is too
+small — scale it up (Stage 2 step 1). This is commonly self-inflicted by
+removing the GPU taint during bootstrap and restoring it later: the
+operator pods schedule onto GPU nodes while untainted, then get evicted
+on re-taint with nowhere to go. Add worker capacity instead; never park
+the platform stack on GPU nodes.
 
 **GPU node is cordoned (`SchedulingDisabled`).**
 The GPU Operator's upgrade-controller can cordon a node and park it there
@@ -344,7 +408,10 @@ clusters often use self-signed certs.
 ## Cluster lifecycle reminders
 
 - **Auto-stop is 6 hours** from provisioning. The cluster pauses; resume
-  from the RHDP order page.
+  from the RHDP order page. **Resume does not bring back GPU nodes added
+  via MachineSet** — they stay `stopped` and must be deleted so the
+  MachineSet rebuilds them. See the `NotReady` GPU nodes entry in
+  Troubleshooting. Budget ~15 minutes for this after every resume.
 - **Auto-destroy is 30 hours.** Provision a fresh one and re-run this
   procedure from Stage 1.
 - **Cluster ID is per-provision.** Re-run Stage 1, step 2 every time you
