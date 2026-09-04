@@ -4,7 +4,7 @@ kind: Kustomization
 namespace: openshift-gitops
 
 resources:
-  - ../../../components/argocd/apps/overlays/sovereign-ai-rhdp
+  - ../../../components/argocd/apps/overlays/sovereign-ai-rhdp-2x
   - ../../base
 # patches:
 # Uncomment to disable automatic sync (useful when troubleshooting)
@@ -25,7 +25,7 @@ configMapGenerator:
   - name: gitops-repo-config
     literals:
       - repoURL=https://github.com/DevoteamNL/sovereign-ai-gitops.git
-      - targetRevision=main
+      - targetRevision=rhoai-2x
 
 replacements:
   - source:

@@ -6,7 +6,7 @@ metadata:
   labels:
     machine.openshift.io/cluster-api-cluster: ${CLUSTER_ID}
 spec:
-  replicas: 2
+  replicas: 3
   selector:
     matchLabels:
       machine.openshift.io/cluster-api-cluster: ${CLUSTER_ID}

@@ -5,7 +5,7 @@ resources:
   - ../../base
 
 # DataScienceCluster component selection for this overlay, mapped from the
-# 2.x sovereign-ai-rhdp set to 3.x equivalents:
+# 2.x sovereign-ai-rhdp-2x set to 3.x equivalents:
 #   2.x components-datasciencepipelines        -> 3.x components-aipipelines
 #   2.x components-kserve-rawdeployments-only   -> 3.x components-kserve (raw is the 3.x default)
 #   2.x components-llamastack / -modelregistry  -> unchanged
