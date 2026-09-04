@@ -24,7 +24,7 @@ spec:
         global:
           namespace: sovereign-ai-research
         models:
-          nemotron-3.5-lightning-30b:
+          nemotron-3-5-lightning-30b:
             tolerations:
               - key: nvidia.com/gpu
                 operator: Equal
