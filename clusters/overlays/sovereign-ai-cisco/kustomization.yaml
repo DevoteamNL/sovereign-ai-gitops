@@ -20,7 +20,7 @@ resources:
 #     version: v1alpha1
 
 # Git repository configuration (single source of truth for all Applications and ApplicationSets)
-# Same repo as sovereign-ai-rhdp — only the cluster overlay differs.
+# Same repo as sovereign-ai-rhdp-2x — only the cluster overlay differs.
 
 configMapGenerator:
   - name: gitops-repo-config

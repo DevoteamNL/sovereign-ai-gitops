@@ -11,7 +11,7 @@ spec:
         values:
           name: user-workload-monitoring
           path: components/cluster-configs/user-workload-monitoring/overlays/default
-      # Same RAG tenant as sovereign-ai-rhdp — reused unchanged.
+      # Same RAG tenant as sovereign-ai-rhdp-2x — reused unchanged.
       - cluster: local
         url: https://kubernetes.default.svc
         values:
