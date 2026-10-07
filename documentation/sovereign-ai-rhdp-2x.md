@@ -32,12 +32,12 @@ applied imperatively, since it requires the per-cluster `${CLUSTER_ID}` and
   Expected output: `kube:admin`, `kubeadmin`, or `admin` depending on how
   RHDP provisioned the cluster.
 
-- This repository cloned locally, on the `rhoai-2x` branch:
+- This repository cloned locally, on the `main` branch (the default after cloning):
 
   ```bash
   git clone https://github.com/DevoteamNL/sovereign-ai-gitops.git
   cd sovereign-ai-gitops
-  git checkout rhoai-2x
+  git checkout main
   ```
 
   No GitHub credentials are required beyond a plain clone — this repo is
@@ -182,17 +182,22 @@ each) for AI workloads.
    > **Important — branch check.** The script compares your current git
    > branch against the `targetRevision` baked into
    > `clusters/overlays/sovereign-ai-rhdp-2x/kustomization.yaml` (currently
-   > `main`). If you're running this from the `rhoai-2x` branch (or any
-   > branch other than `main`), it will detect the mismatch and prompt:
+   > `main`). Run it from `main` and no prompt appears. If you run it from
+   > any other branch (e.g. `my-feature`), it will detect the mismatch and prompt:
    > ```
-   > Your current working branch is rhoai-2x, and your cluster overlay
+   > Your current working branch is my-feature, and your cluster overlay
    > branch is main.
-   > Do you wish to update it to rhoai-2x?
+   > Do you wish to update it to my-feature?
    > ```
    > Answering **Yes** edits `kustomization.yaml`, commits, and **pushes
    > to `origin` automatically** — this is what makes ArgoCD track your
    > actual branch instead of `main`. Answer Yes when working from a
    > feature branch (`yq` prerequisite for this check — see below).
+   >
+   > **Only answer Yes if that branch exists on GitHub.** If it has been
+   > merged and deleted, ArgoCD fails every Application with
+   > `unable to resolve '<branch>' to a commit SHA`. Check out `main`,
+   > `git pull`, and re-run instead.
 
    > **Note.** `bootstrap.sh` needs `yq`, or it fails partway through.
    > No `yq`? Skip the script and run the steps below by hand instead.
